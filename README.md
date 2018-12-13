@@ -9,10 +9,7 @@ A python abstraction for various pubsub providers.
 
 ## Adapters
 
-We plan to create python adapters for the following Pubsub providers, however currently only the GooglePubsub one is working.
 * GoogleCloudAdapter - Working
-* KafkaAdapter - Planned
-* RedisAdapter - Planned
 
 ## Installation
 
@@ -28,19 +25,34 @@ pip install pubsub.py
   * serializer
   * validator
   * filter
-* Use the Protcol to subscribe or publish.
+* Use the Protocol to subscribe or publish.
 
-```
+```python
 from pubsub.protocol import Protocol
 from pubsub.adapters.googlecloud import GooglePubsub
 
 
-protocol = Protocol(adapter=GooglePubsub("GOOGLE_PROJECT_IDENTIFIER", client_identifier="CLIENT_IDENTIFIER"))
+protocol = Protocol(
+    adapter=GooglePubsub("GOOGLE_PROJECT_IDENTIFIER", client_identifier="CLIENT_IDENTIFIER"))
+```
+
+#### PubSub Rest Proxy
+
+The GooglePubSub Adapter can optionally make use of a [PubSub Rest Proxy](https://github.com/Superbalist/js-pubsub-rest-proxy) which allows
+for faster publishing as messages are dispatched in bulk and published by the proxy.
+
+```python
+from pubsub.protocol import Protocol
+from pubsub.adapters.googlecloud import GooglePubsub
+
+
+protocol = Protocol(
+    adapter=GooglePubsub("GOOGLE_PROJECT_IDENTIFIER", client_identifier="CLIENT_IDENTIFIER", pubsub_rest_proxy="http://127.0.0.1:3000"))
 ```
 
 ### Subscribe to a topic
 
-```
+```python
 # Create a callback handler method
 def callback(message, data):
     print(data)
@@ -55,10 +67,11 @@ except Exception as e:
 
 And set an optional `exception_handler`:
 
-```
+```python
 # If you want to capture exceptions, you can create an optional exception handler, like one that uses Sentry
 
 from raven import Client
+
 sentry_client = Client()
 def exception_handler(message, exc):
     sentry_client.captureException()
@@ -71,16 +84,20 @@ future = protocol.subscribe(topic='topic_name', callback=callback, exception_han
 
 ### Publish a message to topic
 
-```
-protocol.publish('topic_name', 'Message')
+```python
+protocol.publish('topic_name', message)
 ```
 
-`protocol.publish` also supports a custom `validation_error_callback`:
-
+When using a PubSub rest proxy you can make use of the faster `bulk_publish` method
+```python
+protocol.bulk_publish('topic_name', [message])
 ```
+
+`protocol.publish` and `protocol.bulk_publish` also support a custom `validation_error_callback`:
+
+```python
 from datetime import datetime
 from socket import gethostname
-from uuid import uuid4
 
 
 def validation_error_callback(invalid_message, exception, protocol):
@@ -94,7 +111,9 @@ def validation_error_callback(invalid_message, exception, protocol):
         'errors': [err.message for err in exception.errors]
     }
     protocol.publish('invalid-messages', message)
+
 protocol.publish(topic, example_message, validation_error_callback)
+protocol.bulk_publish(topic, [example_message], validation_error_callback)
 ```
 
 ## Tests

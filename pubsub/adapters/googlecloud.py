@@ -1,6 +1,7 @@
 import functools
 import logging
 
+from requests import Session
 from google.api_core.exceptions import GoogleAPICallError
 from google.cloud import pubsub_v1
 from grpc import StatusCode
@@ -16,7 +17,10 @@ class GooglePubsub(BaseAdapter):
     Google-cloud adapter class
     """
 
-    def __init__(self, project_id, client_identifier='default'):
+    def __init__(self, project_id, client_identifier='default', pubsub_rest_proxy=None):
+        if pubsub_rest_proxy:
+            self.pubsub_rest_proxy = pubsub_rest_proxy
+            self.session = Session()
         self.publisher = pubsub_v1.PublisherClient()
         self.subscriber = pubsub_v1.SubscriberClient()
         self.client_identifier = client_identifier
@@ -26,15 +30,25 @@ class GooglePubsub(BaseAdapter):
         message.ack()
 
     def publish(self, topic_name, message):
+        if self.pubsub_rest_proxy:
+            log.warning("PubSub Rest Proxy configured but not used by `publish()`. Rather use faster `bulk_publish()`")
         topic_path = self.publisher.topic_path(self.project_id, topic_name)
         self.get_topic(topic_path)
         self.publisher.publish(topic_path, message)
+
+    def bulk_publish(self, topic_name, messages):
+        if not self.pubsub_rest_proxy:
+            raise NotImplementedError('`bulk_publish()` not possible without a PubSub Rest Proxy')
+        response = self.session.post('{}/messages/{}'.format(self.pubsub_rest_proxy, topic_name), json=messages)
+        response.raise_for_status()
+        return response.json()
 
     def subscribe(self, topic_name, callback, create_topic=False):
         # This makes sure the subscription exists
         self.get_subscription(topic_name, create_topic)
 
-        subscription_path = self.subscriber.subscription_path(self.project_id, '{}.{}'.format(self.client_identifier, topic_name))
+        subscription_path = self.subscriber.subscription_path(
+            self.project_id, '{}.{}'.format(self.client_identifier, topic_name))
 
         log.info('Starting to listen on: %s', subscription_path)
         policy = self.subscriber.subscribe(subscription_path)
@@ -44,7 +58,8 @@ class GooglePubsub(BaseAdapter):
         if not self.client_identifier:
             raise IdentifierRequiredException("Use obj.set_client_identifier('name')")
 
-        subscription_path = self.subscriber.subscription_path(self.project_id, '{}.{}'.format(self.client_identifier, topic_name))
+        subscription_path = self.subscriber.subscription_path(self.project_id, '{}.{}'.format(
+            self.client_identifier, topic_name))
         try:
             return self.subscriber.get_subscription(subscription_path)
         except GoogleAPICallError as exc:
@@ -71,7 +86,8 @@ class GooglePubsub(BaseAdapter):
             raise TopicNotFound("Can't delete unknown topic: {}".format(topic_path))
 
     def delete_subscription(self, topic_name):
-        subscription_path = self.subscriber.subscription_path(self.project_id, '{}.{}'.format(self.client_identifier, topic_name))
+        subscription_path = self.subscriber.subscription_path(
+            self.project_id, '{}.{}'.format(self.client_identifier, topic_name))
         try:
             self.subscriber.delete_subscription(subscription_path)
         except GoogleAPICallError as exc:

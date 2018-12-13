@@ -24,16 +24,26 @@ class MockGoogleAdapter(BaseAdapter):
 
     def __init__(self, client_identifier, topics=None):
         self.client_id = client_identifier
-        topics = topics or []
-        self._messages = {topic: deque() for topic in topics}
+        self.topics = topics or []
+        self._messages = {topic: deque() for topic in self.topics}
 
     def clear_messages(self):
         self._messages = defaultdict(deque)
+
+    def get_topics(self):
+        return self.topics
+
+    def delete_topic(self, topic):
+        raise NotImplementedError('Not implemented')
 
     def publish(self, channel, message, create_topic=True):
         if create_topic and (channel not in self._messages):
             self._messages[channel] = deque()
         self._messages[channel].appendleft(message)
+
+    def bulk_publish(self, channel, messages, create_topic=True):
+        for message in messages:
+            self.publish(channel, message, create_topic)
 
     def subscribe(self, channel, callback, create_topic=False):
         class MockMessage(object):
