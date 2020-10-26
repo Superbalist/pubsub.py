@@ -37,7 +37,7 @@ class Protocol(object):
         self.adapter.bulk_publish(topic, serialized)
 
     def subscribe(
-            self, topic, callback, create_topic=False, exception_handler=lambda x, y: None, always_raise=True):
+            self, topic, callback, create_topic=False, exception_handler=lambda x, y: None, always_raise=True, *args, **kwargs):
 
         def deserializer_callback(message):
             try:
@@ -49,7 +49,7 @@ class Protocol(object):
                     raise exc
             self.adapter.ack(message)
 
-        return self.adapter.subscribe(topic, callback=deserializer_callback, create_topic=create_topic)
+        return self.adapter.subscribe(topic, callback=deserializer_callback, create_topic=create_topic, *args, **kwargs)
 
     def get_topics(self):
         return self.adapter.get_topics()
